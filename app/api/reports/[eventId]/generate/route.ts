@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { generateReport } from '@/lib/openai';
 
+export const runtime = 'nodejs';
+
 interface ReportContent {
   timeline: Array<{
     slot_title: string;

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+
+export const runtime = 'nodejs';
 import { EventWithSlots } from '@/lib/types';
 
 export async function GET(

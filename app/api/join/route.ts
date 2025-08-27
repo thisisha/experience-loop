@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { PushSubscription } from '@/lib/types';
+
+export const runtime = 'nodejs';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {

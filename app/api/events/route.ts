@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { proposeSlotsViaAI } from '@/lib/openai';
+
+export const runtime = 'nodejs';
 import { AIProposedSlots } from '@/lib/types';
 import crypto from 'crypto';
 
