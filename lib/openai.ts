@@ -94,9 +94,23 @@ ${text}`;
 }
 
 export async function generateReport(
-  slots: any[],
-  answers: any[],
-  participant: any
+  slots: Array<{
+    id: string;
+    title: string;
+    desc: string;
+    t_at: string;
+    type: string;
+  }>,
+  answers: Array<{
+    id: string;
+    text?: string;
+    tags?: string[];
+    summary_2?: string[];
+  }>,
+  participant: {
+    nickname: string;
+    team: string;
+  }
 ): Promise<ReportContent> {
   const prompt = `역할: 개인 인사이트 리포트 작성기.
 

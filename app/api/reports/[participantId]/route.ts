@@ -89,7 +89,7 @@ export async function GET(
         total_answers: answers.length,
         total_tags: answers.reduce((acc, answer) => acc + (answer.tags?.length || 0), 0),
         tag_frequency: answers.reduce((acc, answer) => {
-          answer.tags?.forEach(tag => {
+          answer.tags?.forEach((tag: string) => {
             acc[tag] = (acc[tag] || 0) + 1;
           });
           return acc;

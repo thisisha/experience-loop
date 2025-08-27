@@ -126,15 +126,14 @@ export async function POST(
         });
 
         // OpenAI로 리포트 생성
-        const reportData = await generateReport({
-          slots: slots || [],
-          answers: answers || [],
-          tagFrequency,
-          participant: {
+        const reportData = await generateReport(
+          slots || [],
+          answers || [],
+          {
             nickname: participant.nickname,
             team: participant.team
           }
-        });
+        );
 
         // 5. HTML 템플릿 생성 및 바인딩
         const htmlContent = generateHTMLTemplate(reportData, participant, event);

@@ -32,11 +32,20 @@ export async function sendPushNotification(
       },
     });
 
-    await webpush.sendNotification(subscription, pushPayload);
+    // web-push 라이브러리 호환 타입으로 변환
+    const webPushSubscription = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.p256dh,
+        auth: subscription.auth
+      }
+    };
+
+    await webpush.sendNotification(webPushSubscription, pushPayload);
     return { success: true };
   } catch (error) {
     console.error('Push notification failed:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 

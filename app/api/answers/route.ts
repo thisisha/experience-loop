@@ -5,8 +5,38 @@ import { summarizeAnswer } from '@/lib/openai';
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient();
-    const formData = await request.formData();
-    const slotId = formData.get('slot_id') as string;
+    
+    const contentType = request.headers.get('content-type') || '';
+    let slotId: string;
+    let answersData: Record<string, Record<string, unknown>> = {};
+    
+    if (contentType.includes('application/json')) {
+      const payload = await request.json();
+      slotId = payload.slot_id;
+      answersData = payload.answers || {};
+    } else if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      slotId = formData.get('slot_id') as string;
+      
+      // FormData에서 답변 데이터 추출
+      for (const [key, value] of formData.entries()) {
+        if (key.startsWith('answers[')) {
+          const match = key.match(/answers\[([^\]]+)\]\[([^\]]+)\]/);
+          if (match) {
+            const [, questionId, field] = match;
+            if (!answersData[questionId]) {
+              answersData[questionId] = {};
+            }
+            answersData[questionId][field] = value;
+          }
+        }
+      }
+    } else {
+      return NextResponse.json(
+        { error: '지원하지 않는 Content-Type입니다. application/json 또는 multipart/form-data를 사용하세요.' },
+        { status: 400 }
+      );
+    }
 
     if (!slotId) {
       return NextResponse.json(
@@ -53,20 +83,7 @@ export async function POST(request: NextRequest) {
     const participant = participants[0];
     const answers: any[] = [];
 
-    // FormData에서 답변 데이터 추출
-    const answersData: { [key: string]: any } = {};
-    for (const [key, value] of formData.entries()) {
-      if (key.startsWith('answers[')) {
-        const match = key.match(/answers\[([^\]]+)\]\[([^\]]+)\]/);
-        if (match) {
-          const [, questionId, field] = match;
-          if (!answersData[questionId]) {
-            answersData[questionId] = {};
-          }
-          answersData[questionId][field] = value;
-        }
-      }
-    }
+    // FormData에서 답변 데이터 추출은 이미 위에서 처리됨
 
     // 각 질문에 대한 답변 처리
     for (const [questionId, answerData] of Object.entries(answersData)) {
@@ -74,6 +91,8 @@ export async function POST(request: NextRequest) {
         let textContent = '';
         let audioFile: File | null = null;
         let photoFile: File | null = null;
+        
+        const answer = answerData as Record<string, unknown>;
 
         // 텍스트 답변
         if (answerData.text) {

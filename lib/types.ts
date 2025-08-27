@@ -124,12 +124,12 @@ export interface ReportContent {
     due: string;
     priority: number;
   }>;
-  star: {
+  star: Array<{
     s: string;
     t: string;
     a: string;
     r: string;
-  };
+  }>;
   social: {
     linkedin3: string;
   };
