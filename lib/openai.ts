@@ -7,25 +7,21 @@ const openai = new OpenAI({
 
 export async function proposeSlotsViaAI(pdfText: string): Promise<AIProposedSlots> {
   const prompt = `역할: 해커톤/대회 안내문 분석기.
+
 입력: 행사 안내문 텍스트(프로그램/규정/심사 기준 포함).
+
 목표: 타임테이블 슬롯과 슬롯별 "30~60초 컷 질문/안내" 초안을 JSON으로 산출.
 
 출력(JSON):
 { "slots":[
-  {"t_at":"YYYY-MM-DD HH:MM", "title":"", "desc":"",
-   "type":"ask|announce",
-   "questions":[{"text":"", "kind":"text|audio|photo"}],
+  {"t_at":"YYYY-MM-DD HH:MM","title":"","desc":"","type":"ask|announce",
+   "questions":[{"text":"","kind":"text|audio|photo"}],
    "announce":""}
 ]}
 
 설계 원칙:
-- Kolb 경험학습 4단계(경험→성찰→개념화→실험) 매핑:  
-  - 시작/킥오프: 문제정의(경험)  
-  - 멘토링 직후: 성찰(무엇을 배웠나/바뀐 가설)  
-  - 중간점검: 개념화(핵심 가설·지표 재정의)  
-  - 피치 직전/후: 실험·다음 실행  
-- AAR 코어 질문 포함: "무엇이 예정/실제/차이/교훈?"  
-- 목표는 SMART(구체/측정/달성/관련/기한)로 표현.
+- Kolb(경험→성찰→개념화→실험), Gibbs(설명→감정→평가→분석→결론→행동), AAR(예정/실제/차이/교훈) 반영.
+- 준비/킥오프: 문제정의·성공기준(SMART). 멘토링: 성찰(바뀐 가설). 중간: 개념화(지표/리스크). 피치 전후: 실험/다음 실행.
 - ask 슬롯엔 1~2문항, 12~18자 한문장 지향, 음성응답 허용.
 
 PDF 텍스트:
@@ -60,8 +56,11 @@ ${pdfText.substring(0, 200000)}`;
 
 export async function summarizeAnswer(text: string): Promise<AnswerSummary> {
   const prompt = `역할: 응답 요약·태깅기.
+
 입력: 자유 텍스트 또는 STT transcript.
-출력(JSON): {"summary_2":["핵심1","핵심2"], "tags":["mentor","pivot","demo","metric","risk","ui","api"] }
+
+출력(JSON): {"summary_2":["핵심1","핵심2"], "tags":["mentor","pivot","demo","metric","risk","ui","api"]}
+
 규칙: summary_2는 2문장, 태그는 1~3개.
 
 텍스트:
@@ -100,7 +99,9 @@ export async function generateReport(
   participant: any
 ): Promise<ReportContent> {
   const prompt = `역할: 개인 인사이트 리포트 작성기.
-입력: slots[], answers[], tag 빈도, 참가자 메타(닉네임/팀).
+
+입력: slots[], answers[], 태그 빈도, 참가자 메타(닉네임/팀).
+
 출력(JSON):
 {
  "timeline":[{"slot_title":"","snap":"한 줄","photo?":""}],
@@ -111,6 +112,7 @@ export async function generateReport(
  "star":[{"s":"","t":"","a":"","r":""}],
  "social":{"linkedin3":"3줄 요약"}
 }
+
 규칙: 간결·행동 동사, 불필요 수식어 금지.
 
 데이터:
