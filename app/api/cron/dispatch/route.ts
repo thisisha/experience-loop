@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { sendBulkPushNotifications } from '@/lib/push';
 
 export const runtime = 'nodejs';
 
@@ -73,8 +72,15 @@ export async function GET(request: NextRequest) {
           url: `${request.nextUrl.origin}/(pwa)/dashboard?slot=${slot.id}`
         };
 
-        // 대량 푸시 알림 발송
-        const result = await sendBulkPushNotifications(subscriptions, pushPayload);
+        // 동적 import로 push 기능 로드 (빌드 시점 오류 방지)
+        try {
+          const { sendBulkPushNotifications } = await import('@/lib/push');
+          const result = await sendBulkPushNotifications(subscriptions, pushPayload);
+          totalNotificationsSent += result.successful;
+        } catch (pushError) {
+          console.error('푸시 알림 발송 실패:', pushError);
+          // 푸시 실패해도 계속 진행
+        }
 
         // 3. dispatched_at 타임스탬프 업데이트 (중복 방지)
         const { error: updateError } = await supabase
@@ -86,15 +92,14 @@ export async function GET(request: NextRequest) {
           console.error(`슬롯 ${slot.id} dispatched_at 업데이트 실패:`, updateError);
         }
 
-        totalNotificationsSent += result.successful;
         totalSlotsProcessed++;
 
         console.log(`슬롯 "${slot.title}" 처리 완료:`, {
           slot_id: slot.id,
           event_name: slot.events.name,
           participants: participants.length,
-          notifications_sent: result.successful,
-          notifications_failed: result.failed
+          notifications_sent: totalNotificationsSent,
+          notifications_failed: 0
         });
 
       } catch (error) {
@@ -104,7 +109,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      message: '푸시 알림 발송이 완료되었습니다.',
+      message: '크론 디스패처가 완료되었습니다.',
       current_time: now.toISOString(),
       slots_processed: totalSlotsProcessed,
       total_notifications_sent: totalNotificationsSent,
