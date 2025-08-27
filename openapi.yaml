@@ -1,0 +1,751 @@
+openapi: 3.0.3
+info:
+  title: Experience Loop (QR Edition) API
+  description: |
+    Experience Loop는 이벤트 참가자들의 실시간 피드백을 수집하고 
+    AI 기반 인사이트를 생성하는 PWA 플랫폼입니다.
+    
+    주요 기능:
+    - PDF 기반 이벤트 생성 및 AI 슬롯/질문 생성
+    - 실시간 푸시 알림 시스템
+    - 다양한 답변 입력 (텍스트/음성/사진)
+    - AI 기반 답변 요약 및 태깅
+    - 개인화된 인사이트 리포트 생성
+  version: 1.0.0
+  contact:
+    name: Experience Loop Team
+    email: support@experienceloop.com
+
+servers:
+  - url: http://localhost:3000
+    description: 로컬 개발 환경
+  - url: https://experience-loop.vercel.app
+    description: 프로덕션 환경
+
+paths:
+  /api/events:
+    post:
+      summary: 새 이벤트 생성
+      description: |
+        PDF URL을 분석하여 AI가 슬롯과 질문을 자동 생성하고 이벤트를 저장합니다.
+        OpenAI GPT-4를 사용하여 교육 모델에 기반한 구조화된 콘텐츠를 생성합니다.
+      tags:
+        - Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - code
+                - password
+                - start_at
+                - end_at
+                - venue
+                - pdf_url
+              properties:
+                name:
+                  type: string
+                  description: 이벤트 이름
+                  example: "2024 해커톤"
+                code:
+                  type: string
+                  description: 이벤트 고유 코드
+                  example: "hackathon2024"
+                password:
+                  type: string
+                  description: 이벤트 관리자 비밀번호
+                  example: "admin123"
+                start_at:
+                  type: string
+                  format: date-time
+                  description: 이벤트 시작 시간
+                  example: "2024-01-15T09:00:00Z"
+                end_at:
+                  type: string
+                  format: date-time
+                  description: 이벤트 종료 시간
+                  example: "2024-01-15T18:00:00Z"
+                venue:
+                  type: string
+                  description: 이벤트 장소
+                  example: "서울 강남구 코엑스"
+                pdf_url:
+                  type: string
+                  format: uri
+                  description: 이벤트 안내문 PDF URL
+                  example: "https://example.com/event-guide.pdf"
+      responses:
+        '200':
+          description: 이벤트 생성 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "이벤트가 성공적으로 생성되었습니다."
+                  event_id:
+                    type: string
+                    format: uuid
+                    example: "123e4567-e89b-12d3-a456-426614174000"
+                  slots_created:
+                    type: integer
+                    description: 생성된 슬롯 수
+                    example: 8
+        '400':
+          description: 잘못된 요청
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "필수 필드가 누락되었습니다."
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "PDF 처리 중 오류가 발생했습니다."
+
+  /api/events/{code}:
+    get:
+      summary: 이벤트 상세 정보 조회
+      description: 이벤트 코드로 이벤트 정보, 슬롯, 질문을 조회합니다.
+      tags:
+        - Events
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 이벤트 코드
+          example: "hackathon2024"
+      responses:
+        '200':
+          description: 이벤트 정보 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: '#/components/schemas/Event'
+                  slots:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Slot'
+                  questions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Question'
+        '404':
+          description: 이벤트를 찾을 수 없음
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "이벤트를 찾을 수 없습니다."
+
+  /api/events/{code}/publish:
+    post:
+      summary: 이벤트 발행
+      description: 이벤트를 'published' 상태로 변경하여 참가자들이 참여할 수 있도록 합니다.
+      tags:
+        - Events
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 이벤트 코드
+          example: "hackathon2024"
+      responses:
+        '200':
+          description: 이벤트 발행 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "이벤트가 성공적으로 발행되었습니다."
+                  event:
+                    $ref: '#/components/schemas/Event'
+        '404':
+          description: 이벤트를 찾을 수 없음
+
+  /api/events/slot/{slotId}:
+    get:
+      summary: 슬롯 정보 조회
+      description: 특정 슬롯의 정보와 연결된 질문들을 조회합니다.
+      tags:
+        - Events
+      parameters:
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 슬롯 ID
+      responses:
+        '200':
+          description: 슬롯 정보 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slot:
+                    $ref: '#/components/schemas/Slot'
+                  event:
+                    $ref: '#/components/schemas/Event'
+        '404':
+          description: 슬롯을 찾을 수 없음
+
+  /api/join:
+    post:
+      summary: 참가자 등록
+      description: |
+        이벤트에 참가자를 등록하고 푸시 알림 구독 정보를 저장합니다.
+        PWA 설치 후 푸시 알림을 받을 수 있습니다.
+      tags:
+        - Participants
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - event_code
+                - password
+                - nickname
+                - team
+              properties:
+                event_code:
+                  type: string
+                  description: 이벤트 코드
+                  example: "hackathon2024"
+                password:
+                  type: string
+                  description: 이벤트 비밀번호
+                  example: "admin123"
+                nickname:
+                  type: string
+                  description: 참가자 닉네임
+                  example: "개발자김"
+                team:
+                  type: string
+                  description: 팀명
+                  example: "팀A"
+                push_subscription:
+                  type: object
+                  description: 푸시 알림 구독 정보 (선택사항)
+                  properties:
+                    endpoint:
+                      type: string
+                      description: 푸시 서비스 엔드포인트
+                    p256dh:
+                      type: string
+                      description: 공개키 (Base64)
+                    auth:
+                      type: string
+                      description: 인증 시크릿 (Base64)
+      responses:
+        '200':
+          description: 참가자 등록 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "참가자 등록이 완료되었습니다."
+                  participant_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: 잘못된 요청
+        '404':
+          description: 이벤트를 찾을 수 없음
+
+  /api/answers:
+    post:
+      summary: 답변 제출
+      description: |
+        슬롯에 대한 답변을 제출하고 AI를 통해 요약 및 태깅을 생성합니다.
+        텍스트, 오디오, 사진 형태의 답변을 지원합니다.
+      tags:
+        - Answers
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - slot_id
+              properties:
+                slot_id:
+                  type: string
+                  format: uuid
+                  description: 슬롯 ID
+                answers:
+                  type: object
+                  description: 질문별 답변 데이터
+                  additionalProperties:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                        description: 텍스트 답변
+                      kind:
+                        type: string
+                        enum: [text, audio, photo]
+                        description: 답변 유형
+                      audio:
+                        type: string
+                        format: binary
+                        description: 오디오 파일 (WAV)
+                      photo:
+                        type: string
+                        format: binary
+                        description: 사진 파일
+      responses:
+        '200':
+          description: 답변 제출 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "답변이 성공적으로 저장되었습니다."
+                  answers_saved:
+                    type: integer
+                    description: 저장된 답변 수
+                    example: 3
+                  answers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Answer'
+        '400':
+          description: 잘못된 요청
+        '500':
+          description: 서버 오류
+
+  /api/reports/{eventId}/generate:
+    post:
+      summary: 참가자별 리포트 생성
+      description: |
+        이벤트의 모든 참가자에 대해 AI 기반 개인 인사이트 리포트를 생성합니다.
+        OpenAI GPT-4를 사용하여 답변과 슬롯 데이터를 분석합니다.
+      tags:
+        - Reports
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 이벤트 ID
+      responses:
+        '200':
+          description: 리포트 생성 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "참가자별 리포트 생성이 완료되었습니다."
+                  event:
+                    $ref: '#/components/schemas/Event'
+                  total_participants:
+                    type: integer
+                    description: 총 참가자 수
+                    example: 25
+                  reports_generated:
+                    type: integer
+                    description: 생성된 리포트 수
+                    example: 25
+                  reports:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        participant_id:
+                          type: string
+                          format: uuid
+                        nickname:
+                          type: string
+                        team:
+                          type: string
+                        report_id:
+                          type: string
+                          format: uuid
+                        webview_url:
+                          type: string
+                        pdf_url:
+                          type: string
+        '404':
+          description: 이벤트를 찾을 수 없음
+        '500':
+          description: 서버 오류
+
+  /api/reports/{participantId}:
+    get:
+      summary: 개인 리포트 조회
+      description: 특정 참가자의 리포트를 조회합니다.
+      tags:
+        - Reports
+      parameters:
+        - name: participantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 참가자 ID
+      responses:
+        '200':
+          description: 리포트 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '404':
+          description: 리포트를 찾을 수 없음
+
+  /api/cron/dispatch:
+    get:
+      summary: 푸시 알림 발송 (크론)
+      description: |
+        현재 시간부터 2분 후까지의 'ask' 타입 슬롯에 대해 
+        모든 참가자에게 웹푸시 알림을 발송합니다.
+        중복 방지를 위해 dispatched_at 타임스탬프를 기록합니다.
+      tags:
+        - Cron
+      responses:
+        '200':
+          description: 푸시 알림 발송 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "푸시 알림 발송이 완료되었습니다."
+                  current_time:
+                    type: string
+                    format: date-time
+                  slots_processed:
+                    type: integer
+                    description: 처리된 슬롯 수
+                    example: 2
+                  total_notifications_sent:
+                    type: integer
+                    description: 발송된 알림 수
+                    example: 45
+                  processing_summary:
+                    type: object
+                    properties:
+                      total_slots_found:
+                        type: integer
+                      slots_processed:
+                        type: integer
+                      notifications_sent:
+                        type: integer
+        '200':
+          description: 발송할 슬롯 없음
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "발송할 슬롯이 없습니다."
+                  current_time:
+                    type: string
+                    format: date-time
+                  slots_found:
+                    type: integer
+                    example: 0
+
+components:
+  schemas:
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        password_hash:
+          type: string
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        venue:
+          type: string
+        pdf_url:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [draft, published, completed]
+        created_at:
+          type: string
+          format: date-time
+
+    Slot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        desc:
+          type: string
+        t_at:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [ask, announce]
+        order_idx:
+          type: integer
+        dispatched_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slot_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        kind:
+          type: string
+          enum: [text, audio, photo]
+        required:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Participant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        nickname:
+          type: string
+        team:
+          type: string
+        push_endpoint:
+          type: string
+          nullable: true
+        p256dh:
+          type: string
+          nullable: true
+        auth:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Answer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        participant_id:
+          type: string
+          format: uuid
+        slot_id:
+          type: string
+          format: uuid
+        question_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        summary_2:
+          type: array
+          items:
+            type: string
+          description: 2문장 요약
+        tags:
+          type: array
+          items:
+            type: string
+          description: 1-3개 태그
+        created_at:
+          type: string
+          format: date-time
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        participant_id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        content:
+          type: object
+          description: AI 생성 리포트 내용
+          properties:
+            timeline:
+              type: array
+              items:
+                type: object
+                properties:
+                  slot_title:
+                    type: string
+                  snap:
+                    type: string
+                  photo:
+                    type: string
+                    nullable: true
+            story:
+              type: object
+              properties:
+                problem:
+                  type: string
+                solution:
+                  type: string
+                validation:
+                  type: string
+            mentoring:
+              type: object
+              properties:
+                highlights:
+                  type: array
+                  items:
+                    type: string
+                applied:
+                  type: array
+                  items:
+                    type: string
+            strengths:
+              type: array
+              items:
+                type: string
+            improvements:
+              type: array
+              items:
+                type: string
+            next30:
+              type: array
+              items:
+                type: object
+                properties:
+                  task:
+                    type: string
+                  due:
+                    type: string
+                    format: date
+                  priority:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+            star:
+              type: array
+              items:
+                type: object
+                properties:
+                  s:
+                    type: string
+                    description: Situation
+                  t:
+                    type: string
+                    description: Task
+                  a:
+                    type: string
+                    description: Action
+                  r:
+                    type: string
+                    description: Result
+            social:
+              type: object
+              properties:
+                linkedin3:
+                  type: string
+                  description: 3줄 LinkedIn 요약
+        webview_url:
+          type: string
+        pdf_url:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+
+tags:
+  - name: Events
+    description: 이벤트 생성 및 관리
+  - name: Participants
+    description: 참가자 등록 및 관리
+  - name: Answers
+    description: 답변 제출 및 AI 분석
+  - name: Reports
+    description: 개인 인사이트 리포트
+  - name: Cron
+    description: 자동화된 크론 작업
+
+externalDocs:
+  description: Experience Loop 프로젝트 문서
+  url: https://github.com/experienceloop/docs
