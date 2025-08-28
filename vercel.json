@@ -2,10 +2,10 @@
   "name": "experience-loop",
   "version": 2,
   "functions": {
-    "/api/cron/dispatch": {
+    "api/cron/dispatch": {
       "maxDuration": 30
     },
-    "/api/reports/generate": {
+    "api/reports/generate": {
       "maxDuration": 60
     }
   }
