@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { eventUtils } from '@/lib/storage';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 
@@ -9,25 +10,50 @@ export async function POST(
 ) {
   try {
     const { code } = await params;
-    const supabase = createServerClient();
+    const body = await request.json();
+    const { password } = body;
 
-    // 이벤트 상태를 published로 변경
-    const { error: updateError } = await supabase
-      .from('events')
-      .update({ status: 'published' })
-      .eq('code', code);
-
-    if (updateError) {
-      console.error('이벤트 발행 실패:', updateError);
+    // 입력 검증
+    if (!password) {
       return NextResponse.json(
-        { error: '이벤트 발행에 실패했습니다.' },
-        { status: 500 }
+        { error: '비밀번호가 필요합니다.' },
+        { status: 400 }
       );
     }
 
+    // 이벤트 조회
+    const event = eventUtils.getEvent(code);
+    if (!event) {
+      return NextResponse.json(
+        { error: '이벤트를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    // 비밀번호 검증
+    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+    if (event.password_hash !== passwordHash) {
+      return NextResponse.json(
+        { error: '비밀번호가 올바르지 않습니다.' },
+        { status: 401 }
+      );
+    }
+
+    // 이벤트 상태를 'published'로 변경
+    event.status = 'published';
+    event.published_at = new Date().toISOString();
+
+    console.log(`✅ 이벤트 발행 완료: ${event.name} (${event.code})`);
+
     return NextResponse.json({
       message: '이벤트가 성공적으로 발행되었습니다.',
-      status: 'published'
+      event: {
+        id: event.id,
+        code: event.code,
+        name: event.name,
+        status: event.status,
+        published_at: event.published_at
+      }
     });
 
   } catch (error) {

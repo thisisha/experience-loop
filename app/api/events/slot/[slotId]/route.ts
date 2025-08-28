@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
@@ -9,67 +8,36 @@ export async function GET(
 ) {
   try {
     const { slotId } = await params;
-    const supabase = createServerClient();
-
-    // 슬롯 정보와 질문들을 함께 조회
-    const { data: slot, error: slotError } = await supabase
-      .from('slots')
-      .select(`
-        *,
-        questions (*)
-      `)
-      .eq('id', slotId)
-      .single();
-
-    if (slotError || !slot) {
-      return NextResponse.json(
-        { error: '슬롯을 찾을 수 없습니다.' },
-        { status: 404 }
-      );
-    }
-
-    // 이벤트 정보 조회
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .select('id, name, code')
-      .eq('id', slot.event_id)
-      .single();
-
-    if (eventError || !event) {
-      return NextResponse.json(
-        { error: '이벤트 정보를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
-    }
-
+    
+    // 테스트용 더미 슬롯 데이터
+    const slot = {
+      id: slotId,
+      title: "문제 정의",
+      desc: "주제별 문제점 브레인스토밍",
+      type: "ask",
+      t_at: "2024-12-15 09:30",
+      questions: [
+        {
+          id: "q1",
+          text: "가장 해결하고 싶은 문제는 무엇인가요?",
+          kind: "text"
+        },
+        {
+          id: "q2", 
+          text: "이 문제가 왜 중요한가요?",
+          kind: "audio"
+        }
+      ]
+    };
+    
     return NextResponse.json({
-      slot: {
-        id: slot.id,
-        title: slot.title,
-        desc: slot.desc,
-        t_at: slot.t_at,
-        type: slot.type,
-        questions: slot.questions || []
-      },
-      event: {
-        id: event.id,
-        name: event.name,
-        code: event.code
-      }
+      slot
     });
-
+    
   } catch (error) {
     console.error('슬롯 조회 오류:', error);
-    
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-    
     return NextResponse.json(
-      { error: '서버 오류가 발생했습니다.' },
+      { error: '슬롯 조회에 실패했습니다.' },
       { status: 500 }
     );
   }

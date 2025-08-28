@@ -1,137 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { eventUtils } from '@/lib/storage';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: NextRequest) {
+// 시간대별 자동 알림 발송 (크론 작업)
+export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    console.log('🕐 크론 디스패처 실행 시작...');
+    
+    // 현재 시간
     const now = new Date();
-    const twoMinutesLater = new Date(now.getTime() + 2 * 60 * 1000);
-
-    // 1. 현재~+2분 내의 'ask' 타입 슬롯 조회 (아직 발송되지 않은 것만)
-    const { data: slots, error: slotsError } = await supabase
-      .from('slots')
-      .select(`
-        *,
-        events (
-          id,
-          name,
-          code
-        )
-      `)
-      .eq('type', 'ask')
-      .gte('t_at', now.toISOString())
-      .lte('t_at', twoMinutesLater.toISOString())
-      .is('dispatched_at', null);
-
-    if (slotsError) {
-      console.error('슬롯 조회 실패:', slotsError);
-      return NextResponse.json(
-        { error: '슬롯 정보를 불러올 수 없습니다.' },
-        { status: 500 }
-      );
-    }
-
-    if (!slots || slots.length === 0) {
-      return NextResponse.json({
-        message: '발송할 슬롯이 없습니다.',
-        current_time: now.toISOString(),
-        slots_found: 0
-      });
-    }
-
+    const currentTime = now.getTime();
+    
+    // 모든 이벤트 조회
+    const events = eventUtils.getAllEvents();
     let totalNotificationsSent = 0;
-    let totalSlotsProcessed = 0;
-
-    // 2. 각 슬롯에 대해 참가자들에게 푸시 알림 발송
-    for (const slot of slots) {
-      try {
-        // 해당 이벤트의 모든 참가자 조회
-        const { data: participants, error: participantsError } = await supabase
-          .from('participants')
-          .select('push_endpoint, p256dh, auth')
-          .eq('event_id', slot.events.id);
-
-        if (participantsError || !participants || participants.length === 0) {
-          console.error(`이벤트 ${slot.events.id} 참가자 조회 실패:`, participantsError);
-          continue;
+    
+    for (const event of events) {
+      // 발행된 이벤트만 처리
+      if (event.status !== 'published') continue;
+      
+      // 이벤트의 슬롯들 조회
+      const slots = eventUtils.getEventSlots(event.id);
+      
+      for (const slot of slots) {
+        if (!slot.t_at) continue;
+        
+        const slotTime = new Date(slot.t_at).getTime();
+        const timeDiff = currentTime - slotTime;
+        const timeDiffMinutes = Math.floor(timeDiff / (1000 * 60));
+        
+        // 슬롯 시작 5분 전 알림
+        if (timeDiffMinutes >= -5 && timeDiffMinutes <= -4) {
+          await sendNotification(event.code, slot.id, 'slot_start');
+          totalNotificationsSent++;
         }
-
-        // 푸시 구독 정보 구성
-        const subscriptions = participants.map(p => ({
-          endpoint: p.push_endpoint,
-          p256dh: p.p256dh,
-          auth: p.auth
-        }));
-
-        // 푸시 알림 페이로드 구성
-        const pushPayload = {
-          title: `${slot.events.name} - ${slot.title}`,
-          body: slot.desc,
-          url: `${request.nextUrl.origin}/(pwa)/dashboard?slot=${slot.id}`
-        };
-
-        // 동적 import로 push 기능 로드 (빌드 시점 오류 방지)
-        try {
-          const { sendBulkPushNotifications } = await import('@/lib/push');
-          const result = await sendBulkPushNotifications(subscriptions, pushPayload);
-          totalNotificationsSent += result.successful;
-        } catch (pushError) {
-          console.error('푸시 알림 발송 실패:', pushError);
-          // 푸시 실패해도 계속 진행
+        
+        // 슬롯 진행 중 알림 (15분 후)
+        if (timeDiffMinutes >= 15 && timeDiffMinutes <= 16) {
+          await sendNotification(event.code, slot.id, 'slot_reminder');
+          totalNotificationsSent++;
         }
-
-        // 3. dispatched_at 타임스탬프 업데이트 (중복 방지)
-        const { error: updateError } = await supabase
-          .from('slots')
-          .update({ dispatched_at: now.toISOString() })
-          .eq('id', slot.id);
-
-        if (updateError) {
-          console.error(`슬롯 ${slot.id} dispatched_at 업데이트 실패:`, updateError);
+        
+        // 슬롯 마감 알림 (25분 후)
+        if (timeDiffMinutes >= 25 && timeDiffMinutes <= 26) {
+          await sendNotification(event.code, slot.id, 'slot_end');
+          totalNotificationsSent++;
         }
-
-        totalSlotsProcessed++;
-
-        console.log(`슬롯 "${slot.title}" 처리 완료:`, {
-          slot_id: slot.id,
-          event_name: slot.events.name,
-          participants: participants.length,
-          notifications_sent: totalNotificationsSent,
-          notifications_failed: 0
-        });
-
-      } catch (error) {
-        console.error(`슬롯 ${slot.id} 처리 중 오류:`, error);
-        continue;
+      }
+      
+      // 이벤트 종료 알림 (마지막 슬롯 후 1시간)
+      const lastSlot = slots[slots.length - 1];
+      if (lastSlot && lastSlot.t_at) {
+        const lastSlotTime = new Date(lastSlot.t_at).getTime();
+        const eventEndTime = lastSlotTime + (60 * 60 * 1000); // 1시간 후
+        
+        if (currentTime >= eventEndTime && currentTime <= eventEndTime + (5 * 60 * 1000)) {
+          await sendNotification(event.code, '', 'event_end');
+          totalNotificationsSent++;
+        }
       }
     }
-
+    
+    console.log(`✅ 크론 디스패처 완료: ${totalNotificationsSent}개 알림 발송`);
+    
     return NextResponse.json({
-      message: '크론 디스패처가 완료되었습니다.',
-      current_time: now.toISOString(),
-      slots_processed: totalSlotsProcessed,
-      total_notifications_sent: totalNotificationsSent,
-      processing_summary: {
-        total_slots_found: slots.length,
-        slots_processed: totalSlotsProcessed,
-        notifications_sent: totalNotificationsSent
-      }
+      message: '크론 디스패처가 성공적으로 실행되었습니다.',
+      notifications_sent: totalNotificationsSent,
+      executed_at: now.toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ 크론 디스패처 오류:', error);
+    return NextResponse.json(
+      { error: '크론 디스패처 실행에 실패했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+// 알림 발송 함수
+async function sendNotification(eventCode: string, slotId: string, notificationType: string) {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/notifications/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        eventCode,
+        slotId,
+        notificationType
+      }),
     });
 
-  } catch (error) {
-    console.error('크론 디스패처 오류:', error);
-    
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+    if (response.ok) {
+      console.log(`✅ 알림 발송 성공: ${eventCode} - ${notificationType}`);
+    } else {
+      console.error(`❌ 알림 발송 실패: ${eventCode} - ${notificationType}`);
     }
+  } catch (error) {
+    console.error(`❌ 알림 발송 중 오류: ${eventCode} - ${notificationType}`, error);
+  }
+}
+
+// 크론 작업 상태 확인
+export async function GET() {
+  try {
+    const events = eventUtils.getAllEvents();
+    const publishedEvents = events.filter(e => e.status === 'published');
     
+    const status = {
+      total_events: events.length,
+      published_events: publishedEvents.length,
+      last_execution: new Date().toISOString(),
+      next_scheduled: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5분 후
+    };
+    
+    return NextResponse.json(status);
+    
+  } catch (error) {
+    console.error('크론 상태 확인 오류:', error);
     return NextResponse.json(
-      { error: '서버 오류가 발생했습니다.' },
+      { error: '크론 상태 확인에 실패했습니다.' },
       { status: 500 }
     );
   }
