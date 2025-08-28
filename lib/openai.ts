@@ -35,13 +35,13 @@ async function initializeOpenAI() {
     
     try {
       // CommonJS 방식으로 재시도
-      const OpenAI = require('openai');
-      openai = new OpenAI({
+      const OpenAI = await import('openai');
+      openai = new OpenAI.default({
         apiKey: process.env.OPENAI_API_KEY,
       });
-      console.log('✅ OpenAI 클라이언트 초기화 성공 (require 방식)');
-    } catch (requireError) {
-      console.log('❌ require 방식도 실패:', requireError);
+      console.log('✅ OpenAI 클라이언트 초기화 성공 (dynamic import 방식)');
+    } catch (importError) {
+      console.log('❌ dynamic import 방식도 실패:', importError);
     }
   }
 }

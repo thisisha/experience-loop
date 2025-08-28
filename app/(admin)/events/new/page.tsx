@@ -548,7 +548,7 @@ export default function NewEventPage() {
 
             {slots.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                <p>아직 슬롯이 없습니다. "슬롯 추가" 버튼을 클릭하여 추가하세요.</p>
+                <p>아직 슬롯이 없습니다. &quot;슬롯 추가&quot; 버튼을 클릭하여 추가하세요.</p>
               </div>
             )}
           </div>
