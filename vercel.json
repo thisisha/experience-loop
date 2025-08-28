@@ -1,36 +1,17 @@
 {
   "name": "experience-loop",
   "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/workers/(.*)",
-      "dest": "/workers/$1"
-    },
-    {
-      "src": "/reports/(.*)",
-      "dest": "/reports/$1"
-    }
-  ],
   "crons": [
     {
       "path": "/api/cron/dispatch",
       "schedule": "*/1 * * * *"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
   "functions": {
     "/api/cron/dispatch": {
       "maxDuration": 30
     },
-    "/api/reports/*/generate": {
+    "/api/reports/generate": {
       "maxDuration": 60
     }
   }
