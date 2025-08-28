@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eventUtils } from '@/lib/storage';
+import { eventUtils, storage } from '@/lib/storage';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -45,16 +45,16 @@ export async function PUT(
       // 슬롯의 질문들 제거
       const slotQuestions = eventUtils.getSlotQuestions(slot.id);
       slotQuestions.forEach(question => {
-        const questionIndex = eventUtils.storage.questions.findIndex(q => q.id === question.id);
+        const questionIndex = storage.questions.findIndex(q => q.id === question.id);
         if (questionIndex !== -1) {
-          eventUtils.storage.questions.splice(questionIndex, 1);
+          storage.questions.splice(questionIndex, 1);
         }
       });
       
       // 슬롯 제거
-      const slotIndex = eventUtils.storage.slots.findIndex(s => s.id === slot.id);
+      const slotIndex = storage.slots.findIndex(s => s.id === slot.id);
       if (slotIndex !== -1) {
-        eventUtils.storage.slots.splice(slotIndex, 1);
+        storage.slots.splice(slotIndex, 1);
       }
     });
 
