@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       message: '알림이 성공적으로 발송되었습니다.',
       notification_id: notificationId,
       title: notificationTitle,
-      message: notificationMessage
+      content: notificationMessage
     });
 
   } catch (error) {
